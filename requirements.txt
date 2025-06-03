@@ -4,4 +4,3 @@ matplotlib
 seaborn
 plotly
 scikit-learn
-japanize-matplotlib
