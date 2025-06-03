@@ -7,7 +7,9 @@ import plotly.express as px
 import streamlit as st
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
-import japanize_matplotlib
+import matplotlib
+
+matplotlib.rcParams['font.family'] = 'IPAexGothic'  # または 'Yu Gothic', 'Noto Sans CJK JP' など
 
 # --- ページ設定 ---
 st.set_page_config(page_title="埼玉データ分析アプリ", page_icon="📊", layout="wide")
