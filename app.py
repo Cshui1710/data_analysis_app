@@ -9,7 +9,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import matplotlib
 
-matplotlib.rcParams['font.family'] = 'IPAexGothic'  # または 'Yu Gothic', 'Noto Sans CJK JP' など
+matplotlib.rcParams['font.family'] = 'Yu Gothic'  # または 'Yu Gothic', 'Noto Sans CJK JP' など
 
 # --- ページ設定 ---
 st.set_page_config(page_title="埼玉データ分析アプリ", page_icon="📊", layout="wide")
@@ -125,6 +125,7 @@ if st.session_state.graph_shown:
                     df_sorted = df.sort_values(var, ascending=False).head(10)
                     ax.pie(df_sorted[var], labels=df_sorted["調査年"], autopct='%1.1f%%')
                     ax.set_aspect('equal')
+                fig.tight_layout() 
                 st.pyplot(fig)
     else:
         col_left, col_main, col_right = st.columns([1, 2, 1])
