@@ -8,6 +8,7 @@ import streamlit as st
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import matplotlib
+from matplotlib import font_manager
 
 matplotlib.rcParams['font.family'] = ['IPAexGothic', 'Noto Sans CJK JP', 'Yu Gothic', 'sans-serif'] # または 'Yu Gothic', 'Noto Sans CJK JP' など
 
@@ -123,50 +124,42 @@ if st.session_state.graph_shown:
         
     if graph_type in ["折れ線グラフ", "棒グラフ", "円グラフ"]:
         col1, col2 = st.columns(2)
-        for var, col in zip([x_col, y_col], [col1, col2]):
+        for var, col in zip([x_col, y_col], st.columns(2)):
             with col:
                 st.markdown(f"#### {graph_type}：{var}")
-                fig, ax = plt.subplots(figsize=(6, 4))
+
                 if graph_type == "棒グラフ":
-                    ax.bar(df["調査年"], df[var])
-                    ax.set_ylabel(var)
-                    ax.tick_params(axis='x', rotation=90)
+                    fig = px.bar(df, x="調査年", y=var, title=f"{var}（棒グラフ）")
                 elif graph_type == "折れ線グラフ":
-                    ax.plot(df["調査年"], df[var], marker="o")
-                    ax.set_ylabel(var)
-                    ax.tick_params(axis='x', rotation=90)
+                    fig = px.line(df, x="調査年", y=var, title=f"{var}（折れ線グラフ）", markers=True)
                 elif graph_type == "円グラフ":
                     df_sorted = df.sort_values(var, ascending=False).head(10)
-                    ax.pie(df_sorted[var], labels=df_sorted["調査年"], autopct='%1.1f%%')
-                    ax.set_aspect('equal')
-                fig.tight_layout() 
-                st.pyplot(fig)
+                    fig = px.pie(df_sorted, names="調査年", values=var, title=f"{var}（上位10件・円グラフ）")
+
+                st.plotly_chart(fig, use_container_width=True)
+
     else:
-        col1, col2 = st.columns(2)
         if graph_type == "散布図":
             col_left, col_main, col_right = st.columns([1, 2, 1])
             with col_main:
                 st.markdown(f"#### 散布図：{x_col} vs {y_col}")
-                fig, ax = plt.subplots(figsize=(5.5, 3.5))
-                sns.scatterplot(data=df, x=x_col, y=y_col, ax=ax)
-                fig.tight_layout()
-                st.pyplot(fig)
+                fig = px.scatter(df, x=x_col, y=y_col, title=f"{x_col} vs {y_col}（散布図）")
+                st.plotly_chart(fig, use_container_width=True)
+
         elif graph_type == "ヒストグラム":
-            for var, col in zip([x_col, y_col], [col1, col2]):
+            for var, col in zip([x_col, y_col], st.columns(2)):
                 with col:
                     st.markdown(f"#### ヒストグラム：{var}")
-                    fig, ax = plt.subplots(figsize=(6, 4))
-                    sns.histplot(df[var].dropna(), kde=True, ax=ax)
-                    fig.tight_layout()
-                    st.pyplot(fig)
+                    fig = px.histogram(df, x=var, nbins=20, title=f"{var} のヒストグラム")
+                    st.plotly_chart(fig, use_container_width=True)
+
         elif graph_type == "箱ひげ図":
-            for var, col in zip([x_col, y_col], [col1, col2]):
+            for var, col in zip([x_col, y_col], st.columns(2)):
                 with col:
                     st.markdown(f"#### 箱ひげ図：{var}")
-                    fig, ax = plt.subplots(figsize=(6, 4))
-                    sns.boxplot(y=df[var], ax=ax)
-                    fig.tight_layout()
-                    st.pyplot(fig)
+                    fig = px.box(df, y=var, title=f"{var} の箱ひげ図")
+                    st.plotly_chart(fig, use_container_width=True)
+
 
 
 
