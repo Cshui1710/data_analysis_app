@@ -105,8 +105,20 @@ if st.session_state.graph_button_clicked:
     st.session_state.graph_shown = True
 
 if st.session_state.graph_shown:
-    st.markdown("## 📊 グラフ表示")
+    st.markdown("## グラフ表示")
 
+    # --- グラフの説明文 ---
+    graph_explanations = {
+        "散布図": "散布図は、2つの数値の関係（相関）を視覚的に確認するために使います。点の分布パターンを見ることで、関係の強さや傾向（増える・減る）を読み取れます。",
+        "折れ線グラフ": "折れ線グラフは、時間などの順序に沿ったデータの変化を追うのに適しています。例えば調査年ごとの推移を見たいときに使います。",
+        "棒グラフ": "棒グラフは、カテゴリーごとの数値の違いを比べるときに使います。長さの違いが一目でわかるため、比較に便利です。",
+        "円グラフ": "円グラフは、全体に対する割合を表すのに使います。特定の項目が全体の中でどれくらい占めているかを把握するのに適しています。",
+        "ヒストグラム": "ヒストグラムは、ある変数の「分布（ばらつき）」を確認するときに使います。多く出現する範囲や偏りを可視化します。",
+        "箱ひげ図": "箱ひげ図は、データのばらつきや外れ値を示すために使います。中央値、四分位範囲、最大・最小値が一目でわかります。"
+    }
+
+    st.info(graph_explanations.get(graph_type, ""))
+        
     if graph_type in ["折れ線グラフ", "棒グラフ", "円グラフ"]:
         col1, col2 = st.columns(2)
         for var, col in zip([x_col, y_col], [col1, col2]):
@@ -128,19 +140,35 @@ if st.session_state.graph_shown:
                 fig.tight_layout() 
                 st.pyplot(fig)
     else:
-        col_left, col_main, col_right = st.columns([1, 2, 1])
-        with col_main:
-            fig, ax = plt.subplots(figsize=(5.5, 3.5))
-            if graph_type == "散布図":
+        col1, col2 = st.columns(2)
+        if graph_type == "散布図":
+            col_left, col_main, col_right = st.columns([1, 2, 1])
+            with col_main:
+                st.markdown(f"#### 散布図：{x_col} vs {y_col}")
+                fig, ax = plt.subplots(figsize=(5.5, 3.5))
                 sns.scatterplot(data=df, x=x_col, y=y_col, ax=ax)
-            elif graph_type == "ヒストグラム":
-                sns.histplot(df[x_col], kde=True, ax=ax)
-            elif graph_type == "箱ひげ図":
-                sns.boxplot(data=df[[x_col, y_col]], ax=ax)
-            fig.tight_layout()
-            st.pyplot(fig)
+                fig.tight_layout()
+                st.pyplot(fig)
+        elif graph_type == "ヒストグラム":
+            for var, col in zip([x_col, y_col], [col1, col2]):
+                with col:
+                    st.markdown(f"#### ヒストグラム：{var}")
+                    fig, ax = plt.subplots(figsize=(6, 4))
+                    sns.histplot(df[var].dropna(), kde=True, ax=ax)
+                    fig.tight_layout()
+                    st.pyplot(fig)
+        elif graph_type == "箱ひげ図":
+            for var, col in zip([x_col, y_col], [col1, col2]):
+                with col:
+                    st.markdown(f"#### 箱ひげ図：{var}")
+                    fig, ax = plt.subplots(figsize=(6, 4))
+                    sns.boxplot(y=df[var], ax=ax)
+                    fig.tight_layout()
+                    st.pyplot(fig)
 
-    st.markdown("## 🔍 回帰分析")
+
+
+    st.markdown("## 回帰分析")
     analyze_button = st.button("解析")
 
     if analyze_button:
