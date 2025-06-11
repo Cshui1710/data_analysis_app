@@ -9,7 +9,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import matplotlib
 
-matplotlib.rcParams['font.family'] = 'Yu Gothic'  # または 'Yu Gothic', 'Noto Sans CJK JP' など
+matplotlib.rcParams['font.family'] = ['IPAexGothic', 'Noto Sans CJK JP', 'Yu Gothic', 'sans-serif'] # または 'Yu Gothic', 'Noto Sans CJK JP' など
 
 # --- ページ設定 ---
 st.set_page_config(page_title="埼玉データ分析アプリ", page_icon="📊", layout="wide")
@@ -32,13 +32,15 @@ h1, h2, h3, h4 {
     color: #0d3b66;
 }
 .stButton > button {
-    background-color: #3e92cc;
-    color: white;
+    background-color: #3e92cc !important;
+    color: white !important;
     border: none;
     padding: 0.5rem 1.2rem;
     border-radius: 8px;
     font-weight: bold;
     transition: 0.3s;
+    font-family: inherit;
+    font-size: 16px;
 }
 .stButton > button:hover {
     background-color: #265d88;
