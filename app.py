@@ -221,34 +221,6 @@ if st.session_state.graph_shown:
     if analyze_button:
         st.session_state.analyze_shown = True
 
-# --- 残り時間の表示（常に右上に表示、全ユーザー向け） ---
-if st.session_state.get("lock_time"):
-    now = datetime.now()
-    remaining = st.session_state.lock_time - now
-    if remaining.total_seconds() > 0:
-        mins, secs = divmod(int(remaining.total_seconds()), 60)
-        st.markdown(
-            f"""
-            <div style='position:fixed; top:10px; right:10px; background-color:#fefefe; 
-                        border:1px solid #ccc; padding:10px 20px; border-radius:10px;
-                        box-shadow:2px 2px 6px rgba(0,0,0,0.1); font-weight:bold; color:#0d3b66;'>
-                ⏳ 残り時間：{mins:02d}分 {secs:02d}秒
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f"""
-            <div style='position:fixed; top:10px; right:10px; background-color:#ffe6e6; 
-                        border:1px solid #cc0000; padding:10px 20px; border-radius:10px;
-                        box-shadow:2px 2px 6px rgba(0,0,0,0.1); font-weight:bold; color:#cc0000;'>
-                🔒 入力時間は終了しました
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
 
 # --- 回帰分析表示 ---
 if st.session_state.graph_shown and st.session_state.analyze_shown:
