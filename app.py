@@ -29,27 +29,6 @@ if "start_time" not in st.session_state:
 if "time_limit_minutes" not in st.session_state:
     st.session_state.time_limit_minutes = None
 
-# --- 管理者モード：URLパラメータ対応 ---
-admin_param = st.query_params.get("admin", [None])[0]
-
-
-if admin_param == "shui1710":
-    st.session_state.admin_mode = True
-    st.success("✅ URL経由で管理者モードが有効です")
-
-    if "time_limit_minutes" not in st.session_state or st.session_state.lock_time is None:
-        time_limit_str = st.text_input("⏱ ランキング入力を許可する時間（半角数字・分単位）", key="admin_time_limit_url")
-        if time_limit_str.isdigit():
-            minutes = int(time_limit_str)
-            st.session_state.time_limit_minutes = minutes
-            st.session_state.start_time = datetime.now()
-            st.session_state.lock_time = st.session_state.start_time + timedelta(minutes=minutes)
-            st.session_state.hide_time = st.session_state.start_time + timedelta(minutes=(2 * minutes) / 3)
-            st.info(f"⏳ ランキング登録は {minutes} 分間有効です（{st.session_state.lock_time:%H:%M:%S} に締切）")
-else:
-    st.session_state.admin_mode = False
-
-
 
 # --- 時間チェック ---
 now = datetime.now()
@@ -242,6 +221,35 @@ if st.session_state.graph_shown:
     if analyze_button:
         st.session_state.analyze_shown = True
 
+# --- 残り時間の表示（常に右上に表示、全ユーザー向け） ---
+if st.session_state.get("lock_time"):
+    now = datetime.now()
+    remaining = st.session_state.lock_time - now
+    if remaining.total_seconds() > 0:
+        mins, secs = divmod(int(remaining.total_seconds()), 60)
+        st.markdown(
+            f"""
+            <div style='position:fixed; top:10px; right:10px; background-color:#fefefe; 
+                        border:1px solid #ccc; padding:10px 20px; border-radius:10px;
+                        box-shadow:2px 2px 6px rgba(0,0,0,0.1); font-weight:bold; color:#0d3b66;'>
+                ⏳ 残り時間：{mins:02d}分 {secs:02d}秒
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            f"""
+            <div style='position:fixed; top:10px; right:10px; background-color:#ffe6e6; 
+                        border:1px solid #cc0000; padding:10px 20px; border-radius:10px;
+                        box-shadow:2px 2px 6px rgba(0,0,0,0.1); font-weight:bold; color:#cc0000;'>
+                🔒 入力時間は終了しました
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
 # --- 回帰分析表示 ---
 if st.session_state.graph_shown and st.session_state.analyze_shown:
     df_valid = df[["調査年", x_col, y_col]].dropna()
@@ -269,57 +277,76 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
     </div>
     """, unsafe_allow_html=True)
 
-if "r2" in st.session_state and "x_col" in st.session_state and "y_col" in st.session_state:
-    st.subheader("🏆 チームランキング機能")
+# --- 回帰分析が完了しているかチェック ---
+if st.session_state.get("analyze_shown", False):
 
-    if lock_input:
-        st.warning("⛔ ランキングの登録時間は終了しました。")
-    else:
-        team_name = st.text_input("チーム名を入力してください", key="team_input")
-        hypothesis = st.text_area("🔍 なぜこの項目の組み合わせで決定係数が高かったと思いますか？", key="hypothesis_input", height=100)
+    if "r2" in st.session_state and "x_col" in st.session_state and "y_col" in st.session_state:
+        st.subheader("🏆 チームランキング機能")
 
-        if st.button("ランキングに登録"):
-            if team_name and hypothesis:
-                new_record = pd.DataFrame([{
-                    "チーム名": team_name,
-                    "X": st.session_state.x_col,
-                    "Y": st.session_state.y_col,
-                    "R2": st.session_state.r2,
-                    "仮説": hypothesis
-                }])
+        if lock_input:
+            st.warning("⛔ ランキングの登録時間は終了しました。")
+        else:
+            team_name = st.text_input("チーム名を入力してください", key="team_input")
 
-                RANKING_FILE = "team_ranking.csv"
-                if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
-                    existing = pd.read_csv(RANKING_FILE)
-                    updated = pd.concat([existing, new_record], ignore_index=True)
-                else:
-                    updated = new_record
+            # 管理者切替ロジック（省略可）
+            if team_name == "shui1710":
+                st.session_state.admin_mode = True
+                st.success("✅ 管理者モードが有効になりました（チーム名経由）")
 
-                updated.to_csv(RANKING_FILE, index=False)
-                st.success("✅ ランキングに登録しました！")
-            elif not team_name:
-                st.warning("⚠️ チーム名を入力してください。")
-            elif not hypothesis:
-                st.warning("⚠️ 仮説を入力してください。")
+            # 管理者UI
+            if st.session_state.get("admin_mode", False):
+                time_limit_str = st.text_input("⏱ ランキング入力を許可する時間（分）", key="admin_time_limit_by_team")
+                if time_limit_str.isdigit():
+                    minutes = int(time_limit_str)
+                    st.session_state.time_limit_minutes = minutes
+                    st.session_state.start_time = datetime.now()
+                    st.session_state.lock_time = st.session_state.start_time + timedelta(minutes=minutes)
+                    st.session_state.hide_time = st.session_state.start_time + timedelta(minutes=(2 * minutes) / 3)
+                    st.info(f"⏳ ランキング登録は {minutes} 分間有効です（{st.session_state.lock_time:%H:%M:%S} に締切）")
 
-# --- ランキング表示 ---
-RANKING_FILE = "team_ranking.csv"
-if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
-    if hide_ranking:
-        st.info("👁️‍🗨️ 現在、ランキング一覧は非表示時間帯です。")
-    else:
-        with st.expander("📋 チームランキング一覧（クリックで表示／非表示）", expanded=False):
-            st.markdown("""
-                <h3 style='font-size: 28px; color: #0d3b66; margin-top: 0;'>📋 チームランキング一覧（R²順）</h3>
-            """, unsafe_allow_html=True)
+            # 仮説 + 登録ボタン
+            if team_name:
+                hypothesis = st.text_area("🔍 なぜこの項目の組み合わせで決定係数が高かったと思いますか？", key="hypothesis_input", height=100)
 
-            df_rank = pd.read_csv(RANKING_FILE).sort_values("R2", ascending=False)
+                if st.button("ランキングに登録"):
+                    if hypothesis:
+                        new_record = pd.DataFrame([{
+                            "チーム名": team_name,
+                            "X": st.session_state.x_col,
+                            "Y": st.session_state.y_col,
+                            "R2": st.session_state.r2,
+                            "仮説": hypothesis
+                        }])
 
-            st.dataframe(
-                df_rank,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "仮説": st.column_config.TextColumn("仮説", width="large")
-                }
-            )
+                        RANKING_FILE = "team_ranking.csv"
+                        if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
+                            existing = pd.read_csv(RANKING_FILE)
+                            updated = pd.concat([existing, new_record], ignore_index=True)
+                        else:
+                            updated = new_record
+
+                        updated.to_csv(RANKING_FILE, index=False)
+                        st.success("✅ ランキングに登録しました！")
+                    else:
+                        st.warning("⚠️ 仮説を入力してください。")
+
+    # --- ランキング表示 ---
+    if os.path.exists("team_ranking.csv") and os.path.getsize("team_ranking.csv") > 0:
+        if hide_ranking:
+            st.info("👁️‍🗨️ 現在、ランキング一覧は非表示時間帯です。")
+        else:
+            with st.expander("📋 チームランキング一覧（クリックで表示／非表示）", expanded=False):
+                st.markdown("""
+                    <h3 style='font-size: 28px; color: #0d3b66; margin-top: 0;'>📋 チームランキング一覧（R²順）</h3>
+                """, unsafe_allow_html=True)
+
+                df_rank = pd.read_csv("team_ranking.csv").sort_values("R2", ascending=False)
+
+                st.dataframe(
+                    df_rank,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "仮説": st.column_config.TextColumn("仮説", width="large")
+                    }
+                )
