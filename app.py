@@ -9,11 +9,58 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import matplotlib
 from matplotlib import font_manager
+import time
+from datetime import datetime, timedelta
 
 matplotlib.rcParams['font.family'] = ['IPAexGothic', 'Noto Sans CJK JP', 'Yu Gothic', 'sans-serif'] # または 'Yu Gothic', 'Noto Sans CJK JP' など
 
 # --- ページ設定 ---
 st.set_page_config(page_title="埼玉データ分析アプリ", page_icon="📊", layout="wide")
+
+# 管理者モードフラグとタイマー制御変数
+if "admin_mode" not in st.session_state:
+    st.session_state.admin_mode = False
+if "lock_time" not in st.session_state:
+    st.session_state.lock_time = None
+if "hide_time" not in st.session_state:
+    st.session_state.hide_time = None
+if "start_time" not in st.session_state:
+    st.session_state.start_time = None
+if "time_limit_minutes" not in st.session_state:
+    st.session_state.time_limit_minutes = None
+
+# --- 管理者モード：URLパラメータ対応 ---
+admin_param = st.query_params.get("admin", [None])[0]
+
+
+if admin_param == "shui1710":
+    st.session_state.admin_mode = True
+    st.success("✅ URL経由で管理者モードが有効です")
+
+    if "time_limit_minutes" not in st.session_state or st.session_state.lock_time is None:
+        time_limit_str = st.text_input("⏱ ランキング入力を許可する時間（半角数字・分単位）", key="admin_time_limit_url")
+        if time_limit_str.isdigit():
+            minutes = int(time_limit_str)
+            st.session_state.time_limit_minutes = minutes
+            st.session_state.start_time = datetime.now()
+            st.session_state.lock_time = st.session_state.start_time + timedelta(minutes=minutes)
+            st.session_state.hide_time = st.session_state.start_time + timedelta(minutes=(2 * minutes) / 3)
+            st.info(f"⏳ ランキング登録は {minutes} 分間有効です（{st.session_state.lock_time:%H:%M:%S} に締切）")
+else:
+    st.session_state.admin_mode = False
+
+
+
+# --- 時間チェック ---
+now = datetime.now()
+lock_input = (
+    st.session_state.lock_time is not None and now >= st.session_state.lock_time
+)
+hide_ranking = (
+    st.session_state.hide_time is not None and now >= st.session_state.hide_time
+)
+
+
 
 # --- スタイル設定 ---
 st.markdown("""
@@ -63,6 +110,26 @@ if "analyze_shown" not in st.session_state:
 
 # --- データ読み込み ---
 @st.cache_data
+def precompute_valid_pairs(df, threshold=0.9, cache_file="low_r2_pairs.csv"):
+    if os.path.exists(cache_file):
+        return pd.read_csv(cache_file).values.tolist()
+    
+    from itertools import combinations
+    valid_pairs = []
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+    
+    for col1, col2 in combinations(numeric_cols, 2):
+        sub_df = df[[col1, col2]].dropna()
+        if len(sub_df) > 2:
+            model = LinearRegression()
+            model.fit(sub_df[[col1]], sub_df[col2])
+            r2 = r2_score(sub_df[col2], model.predict(sub_df[[col1]]))
+            if r2 < threshold:
+                valid_pairs.append((col1, col2))
+    
+    pd.DataFrame(valid_pairs, columns=["X", "Y"]).to_csv(cache_file, index=False)
+    return valid_pairs
+
 def load_data():
     df = pd.read_csv("saitama_data2.csv")
     df = df[df["調査年"].notna()]  # 調査年が空でないもの
@@ -75,7 +142,9 @@ def load_data():
 
 # --- データ読み込み ---
 df = load_data()
-numeric_columns = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+numeric_columns = [col for col in df.columns if df[col].dtype in ["float64", "int64"]]
+valid_pairs = precompute_valid_pairs(df)
+x_candidates = [col for col in numeric_columns if any(col == x for x, y in valid_pairs)]
 
 # --- タイトル ---
 st.title("埼玉県オープンデータ分析体験")
@@ -83,9 +152,13 @@ st.title("埼玉県オープンデータ分析体験")
 # --- サイドバー設定 ---
 with st.sidebar:
     st.markdown("## 🎛 データ設定")
-    x_col = st.selectbox("X軸にする項目", numeric_columns, key="x")
+    x_col = st.selectbox("X軸にする項目", x_candidates, key="x")
     x_head = x_col[0]
-    y_col = st.selectbox("Y軸にする項目", [col for col in numeric_columns if col != x_col and col[0] != x_head], key="y")
+
+    # x_colに対応するR²<0.9のY軸候補だけを抽出
+    y_candidates_all = [y for x, y in valid_pairs if x == x_col and y[0] != x_head]
+    y_candidates = [col for col in numeric_columns if col in y_candidates_all]
+    y_col = st.selectbox("Y軸にする項目", y_candidates, key="y")
 
     previous_graph_type = st.session_state.get("previous_graph_type")
     graph_type = st.radio("表示するグラフの種類", [
@@ -196,17 +269,23 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
     </div>
     """, unsafe_allow_html=True)
 
-    if "r2" in st.session_state and "x_col" in st.session_state and "y_col" in st.session_state:
-        st.subheader("🏆 チームランキング機能")
+if "r2" in st.session_state and "x_col" in st.session_state and "y_col" in st.session_state:
+    st.subheader("🏆 チームランキング機能")
+
+    if lock_input:
+        st.warning("⛔ ランキングの登録時間は終了しました。")
+    else:
         team_name = st.text_input("チーム名を入力してください", key="team_input")
+        hypothesis = st.text_area("🔍 なぜこの項目の組み合わせで決定係数が高かったと思いますか？", key="hypothesis_input", height=100)
 
         if st.button("ランキングに登録"):
-            if team_name:
+            if team_name and hypothesis:
                 new_record = pd.DataFrame([{
                     "チーム名": team_name,
                     "X": st.session_state.x_col,
                     "Y": st.session_state.y_col,
-                    "R2": st.session_state.r2
+                    "R2": st.session_state.r2,
+                    "仮説": hypothesis
                 }])
 
                 RANKING_FILE = "team_ranking.csv"
@@ -217,9 +296,30 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
                     updated = new_record
 
                 updated.to_csv(RANKING_FILE, index=False)
-                st.success("ランキングに登録しました！")
+                st.success("✅ ランキングに登録しました！")
+            elif not team_name:
+                st.warning("⚠️ チーム名を入力してください。")
+            elif not hypothesis:
+                st.warning("⚠️ 仮説を入力してください。")
 
-        if os.path.exists("team_ranking.csv") and os.path.getsize("team_ranking.csv") > 0:
-            st.subheader("📋 チームランキング一覧（R²順）")
-            df_rank = pd.read_csv("team_ranking.csv").sort_values("R2", ascending=False)
-            st.dataframe(df_rank)
+# --- ランキング表示 ---
+RANKING_FILE = "team_ranking.csv"
+if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
+    if hide_ranking:
+        st.info("👁️‍🗨️ 現在、ランキング一覧は非表示時間帯です。")
+    else:
+        with st.expander("📋 チームランキング一覧（クリックで表示／非表示）", expanded=False):
+            st.markdown("""
+                <h3 style='font-size: 28px; color: #0d3b66; margin-top: 0;'>📋 チームランキング一覧（R²順）</h3>
+            """, unsafe_allow_html=True)
+
+            df_rank = pd.read_csv(RANKING_FILE).sort_values("R2", ascending=False)
+
+            st.dataframe(
+                df_rank,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "仮説": st.column_config.TextColumn("仮説", width="large")
+                }
+            )
