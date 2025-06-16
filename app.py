@@ -290,8 +290,9 @@ if st.session_state.get("analyze_shown", False):
 
             # 管理者切替ロジック（省略可）
             if team_name == "shui1710":
-                st.session_state.admin_mode = True
-                st.success("✅ 管理者モードが有効になりました（チーム名経由）")
+                if not st.session_state.admin_mode:
+                    st.session_state.admin_mode = True
+                    st.rerun()  # 状態が変わったら再レンダリング
 
             # 管理者UI
             if st.session_state.get("admin_mode", False):
