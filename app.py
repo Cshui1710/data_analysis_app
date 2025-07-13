@@ -103,8 +103,25 @@ with st.sidebar:
 
     # --- Y軸の選択 ---
     x_head = x_col[0]
-    y_candidates = [col for col in numeric_columns if col != x_col and col[0] != x_head]
-    
+
+    # 人口データ（例：Aで始まる列名）
+    def is_population(col): return col.startswith("A")
+
+    # 図書館データ（列名に"図書館"が含まれる）
+    def is_library(col): return "図書館" in col
+
+    # Y軸候補フィルタ：Xと同じ列／同じイニシャル／人口×図書館の組み合わせ → 除外
+    y_candidates = []
+    for col in numeric_columns:
+        if col == x_col:
+            continue
+        if col[0] == x_head:
+            continue
+        if (is_population(x_col) and is_library(col)) or (is_library(x_col) and is_population(col)):
+            continue
+        y_candidates.append(col)
+
+    # ✅ forループの外で選択＆状態管理
     prev_y = st.session_state.get("prev_y")
     y_col = st.selectbox("Y軸にする項目", y_candidates, key="y")
     if prev_y is not None and prev_y != y_col:
