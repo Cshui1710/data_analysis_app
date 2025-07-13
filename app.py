@@ -14,32 +14,10 @@ from datetime import datetime, timedelta
 
 matplotlib.rcParams['font.family'] = ['IPAexGothic', 'Noto Sans CJK JP', 'Yu Gothic', 'sans-serif'] # または 'Yu Gothic', 'Noto Sans CJK JP' など
 
+
+
 # --- ページ設定 ---
 st.set_page_config(page_title="埼玉データ分析アプリ", page_icon="📊", layout="wide")
-
-# 管理者モードフラグとタイマー制御変数
-if "admin_mode" not in st.session_state:
-    st.session_state.admin_mode = False
-if "lock_time" not in st.session_state:
-    st.session_state.lock_time = None
-if "hide_time" not in st.session_state:
-    st.session_state.hide_time = None
-if "start_time" not in st.session_state:
-    st.session_state.start_time = None
-if "time_limit_minutes" not in st.session_state:
-    st.session_state.time_limit_minutes = None
-
-
-# --- 時間チェック ---
-now = datetime.now()
-lock_input = (
-    st.session_state.lock_time is not None and now >= st.session_state.lock_time
-)
-hide_ranking = (
-    st.session_state.hide_time is not None and now >= st.session_state.hide_time
-)
-
-
 
 # --- スタイル設定 ---
 st.markdown("""
@@ -89,25 +67,7 @@ if "analyze_shown" not in st.session_state:
 
 # --- データ読み込み ---
 @st.cache_data
-def precompute_valid_pairs(df, threshold=0.9, cache_file="low_r2_pairs.csv"):
-    if os.path.exists(cache_file):
-        return pd.read_csv(cache_file).values.tolist()
-    
-    from itertools import combinations
-    valid_pairs = []
-    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-    
-    for col1, col2 in combinations(numeric_cols, 2):
-        sub_df = df[[col1, col2]].dropna()
-        if len(sub_df) > 2:
-            model = LinearRegression()
-            model.fit(sub_df[[col1]], sub_df[col2])
-            r2 = r2_score(sub_df[col2], model.predict(sub_df[[col1]]))
-            if r2 < threshold:
-                valid_pairs.append((col1, col2))
-    
-    pd.DataFrame(valid_pairs, columns=["X", "Y"]).to_csv(cache_file, index=False)
-    return valid_pairs
+
 
 def load_data():
     df = pd.read_csv("saitama_data2.csv")
@@ -121,9 +81,9 @@ def load_data():
 
 # --- データ読み込み ---
 df = load_data()
+#valid_pairs = precompute_valid_pairs(df)
 numeric_columns = [col for col in df.columns if df[col].dtype in ["float64", "int64"]]
-valid_pairs = precompute_valid_pairs(df)
-x_candidates = [col for col in numeric_columns if any(col == x for x, y in valid_pairs)]
+x_candidates = numeric_columns
 
 # --- タイトル ---
 st.title("埼玉県オープンデータ分析体験")
@@ -131,14 +91,29 @@ st.title("埼玉県オープンデータ分析体験")
 # --- サイドバー設定 ---
 with st.sidebar:
     st.markdown("## 🎛 データ設定")
+
+    # --- X軸の選択 ---
+    prev_x = st.session_state.get("prev_x")
     x_col = st.selectbox("X軸にする項目", x_candidates, key="x")
+    if prev_x is not None and prev_x != x_col:
+        st.session_state.graph_shown = False
+        st.session_state.analyze_shown = False
+        st.session_state.graph_button_clicked = False
+    st.session_state.prev_x = x_col
+
+    # --- Y軸の選択 ---
     x_head = x_col[0]
-
-    # x_colに対応するR²<0.9のY軸候補だけを抽出
-    y_candidates_all = [y for x, y in valid_pairs if x == x_col and y[0] != x_head]
-    y_candidates = [col for col in numeric_columns if col in y_candidates_all]
+    y_candidates = [col for col in numeric_columns if col != x_col and col[0] != x_head]
+    
+    prev_y = st.session_state.get("prev_y")
     y_col = st.selectbox("Y軸にする項目", y_candidates, key="y")
+    if prev_y is not None and prev_y != y_col:
+        st.session_state.graph_shown = False
+        st.session_state.analyze_shown = False
+        st.session_state.graph_button_clicked = False
+    st.session_state.prev_y = y_col
 
+    # --- グラフ種類の選択 ---
     previous_graph_type = st.session_state.get("previous_graph_type")
     graph_type = st.radio("表示するグラフの種類", [
         "散布図", "折れ線グラフ", "棒グラフ", "円グラフ", "ヒストグラム", "箱ひげ図"
@@ -148,12 +123,12 @@ with st.sidebar:
         st.session_state.graph_shown = False
         st.session_state.analyze_shown = False
         st.session_state.graph_button_clicked = False
-
     st.session_state.previous_graph_type = graph_type
 
     if st.button("📈 グラフ化"):
         st.session_state.graph_button_clicked = True
         st.session_state.analyze_shown = False
+
 
 # --- グラフ表示 ---
 if st.session_state.graph_button_clicked:
@@ -214,15 +189,46 @@ if st.session_state.graph_shown:
 
 
 
+# --- セッション変数の初期化 ---
+if "analyze_count" not in st.session_state:
+    st.session_state.analyze_count = 0
 
+# --- 解析ボタンの表示と制限 ---
+if st.session_state.graph_shown:
     st.markdown("## 回帰分析")
-    analyze_button = st.button("解析")
 
-    if analyze_button:
-        st.session_state.analyze_shown = True
+    analyze_max = 5
+    remaining = analyze_max - st.session_state.analyze_count
+    st.info(f"🧮 残り解析可能回数：**{remaining}回**（全{analyze_max}回まで）")
+
+    # --- 氏名と仮説入力（st.formを使う） ---
+    st.subheader("📝 事前入力（必須）")
+
+    with st.form("analysis_form", clear_on_submit=False):
+        name = st.text_input("氏名を入力してください", key="name_input_form")
+        hypothesis = st.text_area(
+            "🔍 この組み合わせの理由や仮説を入力してください", key="hypothesis_input_form", height=100
+        )
+
+        analyze_label = f"解析 ×{remaining}"
+        submitted = st.form_submit_button(analyze_label)
+
+    # --- 入力チェックと処理 ---
+    if remaining <= 0:
+        st.warning("⚠️ 解析回数の限界です")
+    elif submitted:
+        if name.strip() == "" or hypothesis.strip() == "":
+            st.warning("※ 氏名と仮説を入力してください。")
+        else:
+            st.session_state.analyze_count += 1
+            st.session_state.analyze_shown = True
+            st.session_state.user_name = name
+            st.session_state.hypothesis = hypothesis
+            st.rerun()
 
 
-# --- 回帰分析表示 ---
+# --- 回帰分析 & ランキング登録 ---
+# --- 回帰分析 & ランキング登録 ---
 if st.session_state.graph_shown and st.session_state.analyze_shown:
     df_valid = df[["調査年", x_col, y_col]].dropna()
     X = df_valid[[x_col]]
@@ -237,89 +243,65 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
     st.session_state.x_col = x_col
     st.session_state.y_col = y_col
 
-    fig2 = px.scatter(df_valid, x=x_col, y=y_col, hover_name="調査年", trendline="ols",
-                      color=x_col, width=800, height=600,
-                      title="📊 回帰直線付き散布図（インタラクティブ）")
+    fig2 = px.scatter(df_valid, x=x_col, y=y_col, hover_name="調査年", trendline="ols", color=x_col)
     st.plotly_chart(fig2, use_container_width=True)
 
-    st.markdown(f"""
-    <div style="background: linear-gradient(to right, #e0f7fa, #ffffff); padding: 1.5rem; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 1.5rem; border-left: 6px solid #00acc1;">
-        <h4 style="color:#003366;">決定係数 R²</h4>
-        <p style="font-size:36px; font-weight:900; color:#01579b; text-align:center; letter-spacing:1px;">{r2:.3f}</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div style="padding:1rem;border-left:6px solid #00acc1;background:#e0f7fa;">
+        <h4>決定係数 R²</h4>
+        <p style="font-size:32px;text-align:center;color:#01579b;">{r2:.3f}</p>
+    </div>""", unsafe_allow_html=True)
 
-# --- 回帰分析が完了しているかチェック ---
-if st.session_state.get("analyze_shown", False):
+    # --- ランキング登録 ---
+    new_record = pd.DataFrame([{
+        "氏名": st.session_state.user_name,
+        "X": x_col,
+        "Y": y_col,
+        "R2": r2,
+        "仮説": st.session_state.hypothesis
+    }])
+    RANKING_FILE = "team_ranking.csv"
+    if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
+        existing = pd.read_csv(RANKING_FILE)
+        updated = pd.concat([existing, new_record], ignore_index=True)
+    else:
+        updated = new_record
+    updated.to_csv(RANKING_FILE, index=False)
 
-    if "r2" in st.session_state and "x_col" in st.session_state and "y_col" in st.session_state:
-        st.subheader("🏆 チームランキング機能")
+    st.success("✅ ランキングに登録されました！")
 
-        if lock_input:
-            st.warning("⛔ ランキングの登録時間は終了しました。")
+
+# --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
+# --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
+RANKING_FILE = "team_ranking.csv"
+if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
+    with st.expander("📋 チームランキング一覧（クリックで表示）", expanded=False):
+        st.subheader("📋 チームランキング一覧（R²順）")
+
+        df_rank = pd.read_csv(RANKING_FILE, encoding='utf-8-sig').sort_values("R2", ascending=False)
+
+        # 表示カラム：Yは非表示、R²は解析1回目までのみ表示
+        columns_to_show = ["氏名", "X", "仮説"]
+        if st.session_state.analyze_count <= 1:
+            columns_to_show.insert(2, "R2")  # R2 を仮説の前に表示
         else:
-            team_name = st.text_input("チーム名を入力してください", key="team_input")
+            st.info("※ ここからは決定係数（R²）は非表示です。")
 
-            # 管理者切替ロジック（省略可）
-            if team_name == "shui1710":
-                if not st.session_state.admin_mode:
-                    st.session_state.admin_mode = True
-                    st.rerun()  # 状態が変わったら再レンダリング
+        # 表示用ラベルの調整
+        rename_dict = {
+            "氏名": "氏名",
+            "X": "X軸の項目",
+            "Y": "",  # 表示しない
+            "R2": "R²値",
+            "仮説": "仮説"
+        }
 
-            # 管理者UI
-            if st.session_state.get("admin_mode", False):
-                time_limit_str = st.text_input("⏱ ランキング入力を許可する時間（分）", key="admin_time_limit_by_team")
-                if time_limit_str.isdigit():
-                    minutes = int(time_limit_str)
-                    st.session_state.time_limit_minutes = minutes
-                    st.session_state.start_time = datetime.now()
-                    st.session_state.lock_time = st.session_state.start_time + timedelta(minutes=minutes)
-                    st.session_state.hide_time = st.session_state.start_time + timedelta(minutes=(2 * minutes) / 3)
-                    st.info(f"⏳ ランキング登録は {minutes} 分間有効です（{st.session_state.lock_time:%H:%M:%S} に締切）")
-
-            # 仮説 + 登録ボタン
-            if team_name:
-                hypothesis = st.text_area("🔍 なぜこの項目の組み合わせで決定係数が高かったと思いますか？", key="hypothesis_input", height=100)
-
-                if st.button("ランキングに登録"):
-                    if hypothesis:
-                        new_record = pd.DataFrame([{
-                            "チーム名": team_name,
-                            "X": st.session_state.x_col,
-                            "Y": st.session_state.y_col,
-                            "R2": st.session_state.r2,
-                            "仮説": hypothesis
-                        }])
-
-                        RANKING_FILE = "team_ranking.csv"
-                        if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
-                            existing = pd.read_csv(RANKING_FILE)
-                            updated = pd.concat([existing, new_record], ignore_index=True)
-                        else:
-                            updated = new_record
-
-                        updated.to_csv(RANKING_FILE, index=False)
-                        st.success("✅ ランキングに登録しました！")
-                    else:
-                        st.warning("⚠️ 仮説を入力してください。")
-
-    # --- ランキング表示 ---
-    if os.path.exists("team_ranking.csv") and os.path.getsize("team_ranking.csv") > 0:
-        if hide_ranking:
-            st.info("👁️‍🗨️ 現在、ランキング一覧は非表示時間帯です。")
-        else:
-            with st.expander("📋 チームランキング一覧（クリックで表示／非表示）", expanded=False):
-                st.markdown("""
-                    <h3 style='font-size: 28px; color: #0d3b66; margin-top: 0;'>📋 チームランキング一覧（R²順）</h3>
-                """, unsafe_allow_html=True)
-
-                df_rank = pd.read_csv("team_ranking.csv").sort_values("R2", ascending=False)
-
-                st.dataframe(
-                    df_rank,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "仮説": st.column_config.TextColumn("仮説", width="large")
-                    }
-                )
+        st.dataframe(
+            df_rank[columns_to_show].rename(columns=rename_dict),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "仮説": st.column_config.TextColumn("仮説", width="large")
+            }
+        )
+else:
+    st.info("まだランキング登録がありません。")
