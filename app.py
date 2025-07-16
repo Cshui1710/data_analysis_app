@@ -12,9 +12,6 @@ from matplotlib import font_manager
 import time
 from datetime import datetime, timedelta
 
-matplotlib.rcParams['font.family'] = ['IPAexGothic', 'Noto Sans CJK JP', 'Yu Gothic', 'sans-serif'] # または 'Yu Gothic', 'Noto Sans CJK JP' など
-
-
 
 # --- ページ設定 ---
 st.set_page_config(page_title="埼玉データ分析アプリ", page_icon="📊", layout="wide")
@@ -173,9 +170,13 @@ if st.session_state.graph_shown:
                 st.markdown(f"#### {graph_type}：{var}")
 
                 if graph_type == "棒グラフ":
-                    fig = px.bar(df, x="調査年", y=var, title=f"{var}（棒グラフ）")
+                    df_sorted = df.sort_values("調査年")
+                    fig = px.bar(df_sorted, x="調査年", y=var, title=f"{var}（棒グラフ）")
+
                 elif graph_type == "折れ線グラフ":
-                    fig = px.line(df, x="調査年", y=var, title=f"{var}（折れ線グラフ）", markers=True)
+                    df_sorted = df.sort_values("調査年")
+                    fig = px.line(df_sorted, x="調査年", y=var, title=f"{var}（折れ線グラフ）", markers=True)
+
                 elif graph_type == "円グラフ":
                     df_sorted = df.sort_values(var, ascending=False).head(10)
                     fig = px.pie(df_sorted, names="調査年", values=var, title=f"{var}（上位10件・円グラフ）")
@@ -291,8 +292,8 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
 # --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
 RANKING_FILE = "team_ranking.csv"
 if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
-    with st.expander("📋 チームランキング一覧（クリックで表示）", expanded=False):
-        st.subheader("📋 チームランキング一覧（R²順）")
+    with st.expander("📋 ランキング一覧（クリックで表示）", expanded=False):
+        st.subheader("📋 ランキング一覧（R²順）")
 
         df_rank = pd.read_csv(RANKING_FILE, encoding='utf-8-sig').sort_values("R2", ascending=False)
 
@@ -320,5 +321,21 @@ if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
                 "仮説": st.column_config.TextColumn("仮説", width="large")
             }
         )
+        # --- 開発モードでのみダウンロードボタンを表示 ---
+        if (
+            "user_name" in st.session_state and
+            "hypothesis" in st.session_state and
+            st.session_state.user_name == "有本" and
+            st.session_state.hypothesis.strip() == "1710"
+        ):
+            csv_full = df_rank.to_csv(index=False, encoding="utf-8-sig")
+            st.download_button(
+                label="⬇️ CSVダウンロード（Y軸含む）",
+                data=csv_full,
+                file_name="team_ranking_full.csv",
+                mime="text/csv"
+            )
+
+
 else:
     st.info("まだランキング登録がありません。")
