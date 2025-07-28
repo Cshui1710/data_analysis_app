@@ -69,7 +69,7 @@ if "analyze_shown" not in st.session_state:
 
 
 def load_data():
-    df = pd.read_csv("saitama_data2.csv")
+    df = pd.read_csv("data/saitama_data2.csv")
     df = df[df["調査年"].notna()]  # 調査年が空でないもの
     df = df.loc[:, ~df.columns.str.contains("Unnamed")]
     df = df.drop(columns=[col for col in ["地域"] if col in df.columns])
@@ -279,7 +279,7 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
         "R2": r2,
         "仮説": st.session_state.hypothesis
     }])
-    RANKING_FILE = "team_ranking.csv"
+    RANKING_FILE = "output/team_ranking.csv"
     if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
         existing = pd.read_csv(RANKING_FILE)
         updated = pd.concat([existing, new_record], ignore_index=True)
@@ -292,7 +292,7 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
 
 # --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
 # --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
-RANKING_FILE = "team_ranking.csv"
+RANKING_FILE = "output/team_ranking.csv"
 if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
     with st.expander("📋 ランキング一覧（クリックで表示）", expanded=False):
         st.subheader("📋 ランキング一覧（R²順）")
@@ -327,14 +327,14 @@ if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
         if (
             "user_name" in st.session_state and
             "hypothesis" in st.session_state and
-            st.session_state.user_name == "有本" and
-            st.session_state.hypothesis.strip() == "1710"
+            st.session_state.user_name == "security" and
+            st.session_state.hypothesis.strip() == "0728"
         ):
             csv_full = df_rank.to_csv(index=False, encoding="utf-8-sig")
             st.download_button(
                 label="⬇️ CSVダウンロード（Y軸含む）",
                 data=csv_full,
-                file_name="team_ranking_full.csv",
+                file_name="output/team_ranking_full.csv",
                 mime="text/csv"
             )
 
