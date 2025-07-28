@@ -1,7 +1,7 @@
 import pandas as pd
 
 # CSVファイルの読み込み
-csv_path = "data.csv"
+csv_path = "data/data.csv"
 df = pd.read_csv(csv_path)
 
 # 決定係数で降順ソートし、上位3件を抽出 → 逆順（3位→1位）に
