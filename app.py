@@ -12,9 +12,11 @@ from matplotlib import font_manager
 import time
 from datetime import datetime, timedelta
 
+#タイムスタンプ追加
+#X,Y順番違っても早い順で
 
 # --- ページ設定 ---
-st.set_page_config(page_title="埼玉データ分析アプリ", page_icon="📊", layout="wide")
+st.set_page_config(page_title="データ分析アプリ", page_icon="📊", layout="wide")
 
 # --- スタイル設定 ---
 st.markdown("""
@@ -83,7 +85,7 @@ numeric_columns = [col for col in df.columns if df[col].dtype in ["float64", "in
 x_candidates = numeric_columns
 
 # --- タイトル ---
-st.title("埼玉県オープンデータ分析体験")
+st.title("オープンデータ分析体験")
 
 # --- サイドバー設定 ---
 with st.sidebar:
@@ -219,11 +221,11 @@ if st.session_state.graph_shown:
     remaining = analyze_max - st.session_state.analyze_count
     st.info(f"🧮 残り解析可能回数：**{remaining}回**（全{analyze_max}回まで）")
 
-    # --- 氏名と仮説入力（st.formを使う） ---
+    # --- チーム名と仮説入力（st.formを使う） ---
     st.subheader("📝 事前入力（必須）")
 
     with st.form("analysis_form", clear_on_submit=False):
-        name = st.text_input("氏名を入力してください", key="name_input_form")
+        name = st.text_input("チーム名を入力してください", key="name_input_form")
         hypothesis = st.text_area(
             "🔍 この組み合わせの理由や仮説を入力してください", key="hypothesis_input_form", height=100
         )
@@ -236,7 +238,7 @@ if st.session_state.graph_shown:
         st.warning("⚠️ 解析回数の限界です")
     elif submitted:
         if name.strip() == "" or hypothesis.strip() == "":
-            st.warning("※ 氏名と仮説を入力してください。")
+            st.warning("※ チーム名と仮説を入力してください。")
         else:
             st.session_state.analyze_count += 1
             st.session_state.analyze_shown = True
@@ -271,7 +273,7 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
 
     # --- ランキング登録 ---
     new_record = pd.DataFrame([{
-        "氏名": st.session_state.user_name,
+        "チーム名": st.session_state.user_name,
         "X": x_col,
         "Y": y_col,
         "R2": r2,
@@ -298,7 +300,7 @@ if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
         df_rank = pd.read_csv(RANKING_FILE, encoding='utf-8-sig').sort_values("R2", ascending=False)
 
         # 表示カラム：Yは非表示、R²は解析1回目までのみ表示
-        columns_to_show = ["氏名", "X", "仮説"]
+        columns_to_show = ["チーム名", "X", "仮説"]
         if st.session_state.analyze_count <= 1:
             columns_to_show.insert(2, "R2")  # R2 を仮説の前に表示
         else:
@@ -306,7 +308,7 @@ if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
 
         # 表示用ラベルの調整
         rename_dict = {
-            "氏名": "氏名",
+            "チーム名": "チーム名",
             "X": "X軸の項目",
             "Y": "",  # 表示しない
             "R2": "R²値",

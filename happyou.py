@@ -20,7 +20,7 @@ for i, row in top3.iterrows():
     icon, rank_label = ranks[i]
     html_block = f"""
       `<div class="ranking">
-        <h2>{icon} {rank_label}：{row['氏名']}</h2>
+        <h2>{icon} {rank_label}：{row['チーム名']}</h2>
         <p><strong>仮説：</strong>{row['仮説'] if pd.notna(row['仮説']) else '（仮説未記入）'}</p>
         <p><strong>X:</strong> {row['X']} × <strong>Y:</strong> {row['Y']}</p>
         <p><strong>決定係数 R² =</strong> {row['R2']:.4f}</p>
