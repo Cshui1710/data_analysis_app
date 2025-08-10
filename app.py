@@ -69,7 +69,7 @@ if "analyze_shown" not in st.session_state:
 
 
 def load_data():
-    df = pd.read_csv("data/saitama_data2.csv")
+    df = pd.read_csv("data/isikawa_data.csv")
     df = df[df["調査年"].notna()]  # 調査年が空でないもの
     df = df.loc[:, ~df.columns.str.contains("Unnamed")]
     df = df.drop(columns=[col for col in ["地域"] if col in df.columns])
