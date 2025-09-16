@@ -64,13 +64,42 @@ if "graph_button_clicked" not in st.session_state:
 if "analyze_shown" not in st.session_state:
     st.session_state.analyze_shown = False
 
+
+# =========================
+# データセット切り替え（追加）
+# =========================
+DATASETS = {
+    "石川データ": "data/isikawa_data.csv",
+    "埼玉データ": "data/saitama_data2.csv",
+}
+
+with st.sidebar:
+    st.markdown("## 🗂 データセット")
+    prev_dataset = st.session_state.get("prev_dataset")
+    dataset_label = st.radio(
+        "使用するデータを選択",
+        list(DATASETS.keys()),
+        index=0 if prev_dataset is None else list(DATASETS.keys()).index(prev_dataset),
+        help="切り替えるとグラフ/解析状態をリセットします",
+    )
+    # 切り替え時のリセット
+    if (prev_dataset is not None) and (prev_dataset != dataset_label):
+        st.session_state.graph_shown = False
+        st.session_state.graph_button_clicked = False
+        st.session_state.analyze_shown = False
+        st.session_state.analyze_count = 0
+    st.session_state.prev_dataset = dataset_label
+
+DATASET_PATH = DATASETS[dataset_label]
+
 # --- データ読み込み ---
 @st.cache_data
 
 
-def load_data():
-    df = pd.read_csv("data/isikawa_data.csv")
-    df = df[df["調査年"].notna()]  # 調査年が空でないもの
+
+def load_data(csv_path: str):   # ← 引数を追加
+    df = pd.read_csv(csv_path)
+    df = df[df["調査年"].notna()]
     df = df.loc[:, ~df.columns.str.contains("Unnamed")]
     df = df.drop(columns=[col for col in ["地域"] if col in df.columns])
     for col in df.columns:
@@ -78,15 +107,16 @@ def load_data():
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
 
-# --- データ読み込み ---
-df = load_data()
+# 呼び出し部分（置き換え）
+df = load_data(DATASET_PATH)
+
 #valid_pairs = precompute_valid_pairs(df)
 numeric_columns = [col for col in df.columns if df[col].dtype in ["float64", "int64"]]
 x_candidates = numeric_columns
 
 # --- タイトル ---
 st.title("オープンデータ分析体験")
-
+st.markdown(f"現在のデータセット：**{dataset_label}**")
 # --- サイドバー設定 ---
 with st.sidebar:
     st.markdown("## 🎛 データ設定")
@@ -292,7 +322,10 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
 
 # --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
 # --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
-RANKING_FILE = "output/team_ranking.csv"
+# 解析結果保存部分の RANKING_FILE を置き換え
+os.makedirs("output", exist_ok=True)
+RANKING_FILE = f"output/team_ranking_{'ishikawa' if dataset_label=='石川データ' else 'saitama'}.csv"
+
 if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
     with st.expander("📋 ランキング一覧（クリックで表示）", expanded=False):
         st.subheader("📋 ランキング一覧（R²順）")
