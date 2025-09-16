@@ -278,7 +278,6 @@ if st.session_state.graph_shown:
 
 
 # --- 回帰分析 & ランキング登録 ---
-# --- 回帰分析 & ランキング登録 ---
 if st.session_state.graph_shown and st.session_state.analyze_shown:
     df_valid = df[["調査年", x_col, y_col]].dropna()
     X = df_valid[[x_col]]
@@ -301,76 +300,91 @@ if st.session_state.graph_shown and st.session_state.analyze_shown:
         <p style="font-size:32px;text-align:center;color:#01579b;">{r2:.3f}</p>
     </div>""", unsafe_allow_html=True)
 
-    # --- ランキング登録 ---
+    # --- ランキング登録（★データセット別に保存） ---
+    os.makedirs("output", exist_ok=True)
+    dataset_key = "ishikawa" if dataset_label == "石川データ" else "saitama"
+    RANKING_FILE = f"output/team_ranking_{dataset_key}.csv"
+
     new_record = pd.DataFrame([{
         "チーム名": st.session_state.user_name,
         "X": x_col,
         "Y": y_col,
-        "R2": r2,
+        "R2": float(r2),
         "仮説": st.session_state.hypothesis
     }])
-    RANKING_FILE = "output/team_ranking.csv"
+
     if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
-        existing = pd.read_csv(RANKING_FILE)
+        existing = pd.read_csv(RANKING_FILE, encoding="utf-8-sig")
         updated = pd.concat([existing, new_record], ignore_index=True)
     else:
         updated = new_record
-    updated.to_csv(RANKING_FILE, index=False)
+
+    # 同じチーム名・X・Yの重複があれば最新を優先（任意）
+    updated = updated.drop_duplicates(subset=["チーム名", "X", "Y"], keep="last")
+
+    updated.to_csv(RANKING_FILE, index=False, encoding="utf-8-sig")
 
     st.success("✅ ランキングに登録されました！")
 
-
-# --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
-# --- チームランキング一覧（常時表示、R²は3回以上で表示） ---
 # 解析結果保存部分の RANKING_FILE を置き換え
+# —— ランキング表示（データセット別） ——
 os.makedirs("output", exist_ok=True)
-RANKING_FILE = f"output/team_ranking_{'ishikawa' if dataset_label=='石川データ' else 'saitama'}.csv"
+dataset_key = "ishikawa" if dataset_label == "石川データ" else "saitama"
+RANKING_FILE = f"output/team_ranking_{dataset_key}.csv"
 
 if os.path.exists(RANKING_FILE) and os.path.getsize(RANKING_FILE) > 0:
     with st.expander("📋 ランキング一覧（クリックで表示）", expanded=False):
-        st.subheader("📋 ランキング一覧（R²順）")
+        st.subheader(f"📋 ランキング一覧（R²順）— {dataset_label}")
 
-        df_rank = pd.read_csv(RANKING_FILE, encoding='utf-8-sig').sort_values("R2", ascending=False)
+        try:
+            df_rank = pd.read_csv(RANKING_FILE, encoding="utf-8-sig")
+        except Exception as e:
+            st.error(f"ランキングの読み込みに失敗しました: {e}")
+            st.stop()
+
+        if "R2" in df_rank.columns:
+            df_rank = df_rank.sort_values("R2", ascending=False)
 
         # 表示カラム：Yは非表示、R²は解析1回目までのみ表示
-        columns_to_show = ["チーム名", "X", "仮説"]
-        if st.session_state.analyze_count <= 1:
+        show_r2 = st.session_state.get("analyze_count", 0) <= 1
+        base_cols = ["チーム名", "X", "仮説"]
+        columns_to_show = base_cols.copy()
+        if show_r2 and "R2" in df_rank.columns:
             columns_to_show.insert(2, "R2")  # R2 を仮説の前に表示
-        else:
+
+        # 存在するカラムだけに絞る（欠落耐性）
+        columns_to_show = [c for c in columns_to_show if c in df_rank.columns]
+
+        if not show_r2:
             st.info("※ ここからは決定係数（R²）は非表示です。")
 
-        # 表示用ラベルの調整
         rename_dict = {
             "チーム名": "チーム名",
             "X": "X軸の項目",
-            "Y": "",  # 表示しない
             "R2": "R²値",
-            "仮説": "仮説"
+            "仮説": "仮説",
         }
 
         st.dataframe(
             df_rank[columns_to_show].rename(columns=rename_dict),
             use_container_width=True,
             hide_index=True,
-            column_config={
-                "仮説": st.column_config.TextColumn("仮説", width="large")
-            }
+            column_config={"仮説": st.column_config.TextColumn("仮説", width="large")},
         )
+
         # --- 開発モードでのみダウンロードボタンを表示 ---
         if (
-            "user_name" in st.session_state and
-            "hypothesis" in st.session_state and
-            st.session_state.user_name == "security" and
-            st.session_state.hypothesis.strip() == "0728"
+            "user_name" in st.session_state
+            and "hypothesis" in st.session_state
+            and st.session_state.user_name == "security"
+            and st.session_state.hypothesis.strip() == "0728"
         ):
             csv_full = df_rank.to_csv(index=False, encoding="utf-8-sig")
             st.download_button(
                 label="⬇️ CSVダウンロード（Y軸含む）",
                 data=csv_full,
-                file_name="output/team_ranking_full.csv",
-                mime="text/csv"
+                file_name=f"team_ranking_full_{dataset_key}.csv",  # ← データセット別ファイル名
+                mime="text/csv",
             )
-
-
 else:
-    st.info("まだランキング登録がありません。")
+    st.info(f"まだ{dataset_label}のランキング登録がありません。")
